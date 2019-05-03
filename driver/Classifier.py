@@ -12,6 +12,8 @@ class DomainClassifier(object):
         self.device = p.get_device() if self.use_cuda else None
 
     def forward(self, lstm_hidden, masks):
+        if self.use_cuda:
+            masks = masks.cuda(self.device)
         score = self.model.forward(lstm_hidden, masks)
         self.score = score
 
