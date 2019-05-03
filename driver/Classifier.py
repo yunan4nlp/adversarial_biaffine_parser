@@ -18,6 +18,8 @@ class DomainClassifier(object):
         self.score = score
 
     def compute_loss(self, true_labels):
+        if self.use_cuda:
+            true_labels = true_labels.cuda(self.device)
         loss = F.cross_entropy(self.score, true_labels)
         return loss
 
