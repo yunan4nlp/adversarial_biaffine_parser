@@ -25,6 +25,7 @@ class ClassifierModel(nn.Module):
         self.output = nn.Linear(config.lstm_hiddens, 2, False)
 
     def forward(self, lstm_hidden, masks):
+
         hidden = self.avg_pooling(lstm_hidden, masks)
         hidden = self.Linear.forward(hidden)
         hidden = ReverseLayerF.apply(hidden)
