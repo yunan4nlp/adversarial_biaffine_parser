@@ -4,6 +4,15 @@ import torch.optim.lr_scheduler
 from driver.Layer import *
 import numpy as np
 
+class ClassifierConfig():
+    def __init__(self, config):
+        self.learning_rate = config.classifier_learning_rate
+        self.decay= config.decay
+        self.decay_steps = config.decay_steps
+        self.beta_1 = config.beta_1
+        self.beta_2 = config.beta_2
+        self.epsilon = config.epsilon
+
 class DomainClassifier(object):
     def __init__(self, model):
         self.model = model

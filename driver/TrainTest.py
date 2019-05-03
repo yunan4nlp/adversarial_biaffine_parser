@@ -11,18 +11,27 @@ from driver.Parser import *
 from data.Dataloader import *
 from driver.ClassifierModel import ClassifierModel
 from driver.Classifier import DomainClassifier
+from driver.Classifier import ClassifierConfig
 import pickle
 
 def train(data, dev_data, test_data, parser, classifier, vocab, config):
     optimizer = Optimizer(filter(lambda p: p.requires_grad, parser.model.parameters()), config)
+    c_config = ClassifierConfig(config)
+    optimizer_classifer = Optimizer(filter(lambda c: c.requires_grad, classifier.model.parameters()), c_config)
 
     global_step = 0
     best_UAS = 0
     best_LAS = 0
     batch_num = int(np.ceil(len(data) / float(config.train_batch_size)))
+    adversarial = False
     for iter in range(config.train_iters):
         start_time = time.time()
         print('Iteration: ' + str(iter))
+        if iter >= config.start_adversarial:
+            adversarial = True
+
+        if adversarial:
+            print("Start Adversarial")
         batch_iter = 0
 
         overall_arc_correct, overall_label_correct, overall_total_arcs = 0, 0, 0
@@ -32,6 +41,7 @@ def train(data, dev_data, test_data, parser, classifier, vocab, config):
             words, extwords, tags, heads, rels, lengths, masks, scores, domain_labels = \
                 batch_data_variable_adv(onebatch, vocab)
             parser.model.train()
+            classifier.model.train()
 
             parser.forward(words, extwords, tags, masks)
             classifier.forward(parser.lstm_hidden, masks)
@@ -40,8 +50,10 @@ def train(data, dev_data, test_data, parser, classifier, vocab, config):
 
             parser_loss = parser.compute_loss(heads, rels, lengths, scores, config.threshold)
             paresr_loss_value = parser_loss.data.cpu().numpy()
-
-            loss = parser_loss + domain_loss
+            if adversarial:
+                loss = parser_loss + domain_loss
+            else:
+                loss = parser_loss
             loss = loss / config.update_every
             loss.backward()
 
@@ -67,8 +79,19 @@ def train(data, dev_data, test_data, parser, classifier, vocab, config):
             if batch_iter % config.update_every == 0 or batch_iter == batch_num:
                 nn.utils.clip_grad_norm_(filter(lambda p: p.requires_grad, parser.model.parameters()), \
                                         max_norm=config.clip)
+
+                nn.utils.clip_grad_norm_(filter(lambda c: c.requires_grad, classifier.model.parameters()), \
+                                         max_norm=config.clip)
+
                 optimizer.step()
-                parser.model.zero_grad()       
+                optimizer_classifer.step()
+
+                optimizer.zero_grad()
+                optimizer_classifer.zero_grad()
+
+                parser.model.zero_grad()
+                classifier.model.zero_grad()
+
                 global_step += 1
 
             if batch_iter % config.validate_every == 0 or batch_iter == batch_num:
@@ -162,20 +185,26 @@ if __name__ == '__main__':
     argparser.add_argument('--model', default='BaseParser')
     argparser.add_argument('--thread', default=4, type=int, help='thread num')
     argparser.add_argument('--use-cuda', action='store_true', default=True)
+    argparser.add_argument('--use_pretrain', action='store_true', default=False)
 
     args, extra_args = argparser.parse_known_args()
     config = Configurable(args.config_file, extra_args)
 
     # vocab = creatVocab(config.train_file, config.min_occur_count)
-    vocab = creatVocab([config.train_file, config.train_target_file]
-                       , config.min_occur_count)
-    vec = vocab.load_pretrained_embs(config.pretrained_embeddings_file)
+    if args.use_pretrain:
+        vocab = pickle.load(open(config.load_vocab_path, 'rb'))
+        vec = vocab.create_pretrained_embs(config.pretrained_embeddings_file)
+    else:
+        vocab = creatVocab([config.train_file, config.train_target_file]
+                           , config.min_occur_count)
+        vec = vocab.load_pretrained_embs(config.pretrained_embeddings_file)
+
     pickle.dump(vocab, open(config.save_vocab_path, 'wb'))
 
     args, extra_args = argparser.parse_known_args()
     config = Configurable(args.config_file, extra_args)
-    torch.set_num_threads(args.thread)
 
+    torch.set_num_threads(args.thread)
     config.use_cuda = False
     if gpu and args.use_cuda: config.use_cuda = True
     print("\nGPU using status: ", config.use_cuda)
@@ -183,6 +212,10 @@ if __name__ == '__main__':
     # print(config.use_cuda)
 
     model = ParserModel(vocab, config, vec)
+    if args.use_pretrain:
+        model.load_state_dict(torch.load(config.load_model_path))
+        print("###Load pretrain parser ok.###")
+
     classifier_model = ClassifierModel(config)
 
     if config.use_cuda:
