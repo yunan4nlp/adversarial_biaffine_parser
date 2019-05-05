@@ -48,10 +48,9 @@ def predict(data, parser, vocab, outputFile, unlabeled=True):
 
 def arc_pred(avg_arc_probs, lengths, predict):
     arcs_batch, arc_values = [], []
-    for arc_logit, length in zip(avg_arc_probs, lengths):
-        arc_probs = softmax2d(arc_logit, length, length)
+    for arc_probs, length in zip(avg_arc_probs, lengths):
         if predict:
-            arc_pred, arc_value = arc_argmax(arc_probs, length, ensure_tree=False, predict=True)
+            arc_pred, arc_value = arc_argmax(arc_probs, length, ensure_tree=True, predict=True)
             arcs_batch.append(arc_pred)
             arc_values.append(arc_value)
         else:
