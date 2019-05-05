@@ -39,7 +39,7 @@ def train(data, dev_data, test_data, parser, classifier, vocab, config):
         overall_correct, overall_total = 0, 0
         for onebatch in data_iter(data, config.train_batch_size, True):
             words, extwords, tags, heads, rels, lengths, masks, scores, domain_labels = \
-                batch_data_variable_adv(onebatch, vocab)
+                batch_data_variable(onebatch, vocab)
             parser.model.train()
             classifier.model.train()
 
@@ -117,13 +117,13 @@ def evaluate(data, parser, vocab, outputFile):
     arc_total_test, arc_correct_test, rel_total_test, rel_correct_test = 0, 0, 0, 0
 
     for onebatch in data_iter(data, config.test_batch_size, False):
-        words, extwords, tags, heads, rels, lengths, masks, scores = batch_data_variable(onebatch, vocab, ignoreTree=True)
+        words, extwords, tags, heads, rels, lengths, masks, scores, _ = batch_data_variable(onebatch, vocab, ignoreTree=True)
         count = 0
         arcs_batch, rels_batch = parser.parse(words, extwords, tags, lengths, masks)
         for tree in batch_variable_depTree(onebatch, arcs_batch, rels_batch, lengths, vocab):
             printDepTree(output, tree)
             # arc_total, arc_correct, rel_total, rel_correct = evalDepTree(tree, onebatch[count])
-            arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[count], tree)
+            arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[count][0], tree)
             arc_total_test += arc_total
             arc_correct_test += arc_correct
             rel_total_test += rel_total
@@ -238,5 +238,8 @@ if __name__ == '__main__':
     #data.extend(data_target)
     dev_data = read_corpus(config.dev_file, vocab)
     test_data = read_corpus(config.test_file, vocab)
+
+    dev_data = domain_labeling(dev_data, False)
+    test_data = domain_labeling(test_data, False)
 
     train(source_data, dev_data, test_data, parser, classifier, vocab, config)

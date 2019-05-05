@@ -21,58 +21,25 @@ def read_corpus(file_path, vocab=None):
             data.append(sentence)
     return data
 
-def sentences_numberize_adv(sentences, vocab):
-    for sentence in sentences:
-        yield sentence2id_adv(sentence, vocab)
-
 def sentences_numberize(sentences, vocab, ignoreTree):
     for sentence in sentences:
-        if ignoreTree:
-            yield sentence2id_ignore_tree(sentence, vocab)
-        else:
-            yield sentence2id(sentence, vocab)
+        yield sentence2id(sentence, vocab, ignoreTree)
 
-def sentence2id_adv(sentence, vocab):
+def sentence2id(sentence, vocab, ignoreTree):
     result = []
     for dep in sentence[0]:
         wordid = vocab.word2id(dep.form)
         extwordid = vocab.extword2id(dep.form)
         tagid = vocab.tag2id(dep.tag)
-        head = dep.head
-        relid = vocab.rel2id(dep.rel)
+        if ignoreTree:
+            head = -1
+            relid = -1
+        else:
+            head = dep.head
+            relid = vocab.rel2id(dep.rel)
         score = dep.score
         result.append([wordid, extwordid, tagid, head, relid, score])
-
     return result, sentence[1]
-
-def sentence2id(sentence, vocab):
-    result = []
-    for dep in sentence:
-        wordid = vocab.word2id(dep.form)
-        extwordid = vocab.extword2id(dep.form)
-        tagid = vocab.tag2id(dep.tag)
-        head = dep.head
-        relid = vocab.rel2id(dep.rel)
-        score = dep.score
-        result.append([wordid, extwordid, tagid, head, relid, score])
-
-    return result
-
-def sentence2id_ignore_tree(sentence, vocab):
-    result = []
-    for dep in sentence:
-        wordid = vocab.word2id(dep.form)
-        extwordid = vocab.extword2id(dep.form)
-        tagid = vocab.tag2id(dep.tag)
-        # head = dep.head
-        # relid = vocab.rel2id(dep.rel)
-        head = -1
-        relid = -1
-        score = dep.score
-        result.append([wordid, extwordid, tagid, head, relid, score])
-
-    return result
-
 
 
 def batch_slice(data, batch_size):
@@ -99,7 +66,7 @@ def data_iter(data, batch_size, shuffle=True):
         yield batch
 
 
-def batch_data_variable_adv(batch, vocab):
+def batch_data_variable(batch, vocab, ignoreTree=False):
     length = len(batch[0][0])
     batch_size = len(batch)
     for b in range(1, batch_size):
@@ -115,7 +82,7 @@ def batch_data_variable_adv(batch, vocab):
     rels = []
     lengths = []
     b = 0
-    for info in sentences_numberize_adv(batch, vocab):
+    for info in sentences_numberize(batch, vocab, ignoreTree):
         index = 0
         sentence = info[0]
         domain_labels[b] = info[1]
@@ -142,50 +109,9 @@ def batch_data_variable_adv(batch, vocab):
 
     return words, extwords, tags, heads, rels, lengths, masks, scores, domain_labels
 
-def batch_data_variable(batch, vocab, ignoreTree=False):
-    length = len(batch[0])
-    batch_size = len(batch)
-    for b in range(1, batch_size):
-        if len(batch[b]) > length: length = len(batch[b])
-
-    words = Variable(torch.LongTensor(batch_size, length).zero_(), requires_grad=False)
-    extwords = Variable(torch.LongTensor(batch_size, length).zero_(), requires_grad=False)
-    tags = Variable(torch.LongTensor(batch_size, length).zero_(), requires_grad=False)
-    masks = Variable(torch.Tensor(batch_size, length).zero_(), requires_grad=False)
-    scores = Variable(torch.FloatTensor(batch_size, length).zero_(), requires_grad=False)
-    heads = []
-    rels = []
-    lengths = []
-    # scores = []
-
-    b = 0
-    for sentence in sentences_numberize(batch, vocab, ignoreTree):
-        index = 0
-        length = len(sentence)
-        lengths.append(length)
-        head = np.zeros((length), dtype=np.int32)
-        rel = np.zeros((length), dtype=np.int32)
-        # score = np.zeros((length), dtype=np.float32)
-        for dep in sentence:
-            words[b, index] = dep[0]
-            extwords[b, index] = dep[1]
-            if dep[2] == None:
-                dep[2] = 0
-            tags[b, index] = dep[2]
-            head[index] = dep[3]
-            rel[index] = dep[4]
-            scores[b, index] = dep[5]
-            masks[b, index] = 1
-            index += 1
-        b += 1
-        heads.append(head)
-        rels.append(rel)
-        # scores.append(score)
-
-    return words, extwords, tags, heads, rels, lengths, masks, scores
-
 def batch_variable_depTree(trees, heads, rels, lengths, vocab):
     for tree, head, rel, length in zip(trees, heads, rels, lengths):
+        tree = tree[0]
         sentence = []
         for idx in range(length):
             sentence.append(Dependency(idx, tree[idx].org_form, tree[idx].tag, head[idx], vocab.id2rel(rel[idx])))

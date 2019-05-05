@@ -20,13 +20,13 @@ def predict(data, parser, vocab, outputFile, unlabeled=True):
     arc_total_test, arc_correct_test, rel_total_test, rel_correct_test = 0, 0, 0, 0
 
     for onebatch in data_iter(data, config.test_batch_size, False):
-        words, extwords, tags, heads, rels, lengths, masks, scores = batch_data_variable(onebatch, vocab, ignoreTree=True)
+        words, extwords, tags, heads, rels, lengths, masks, scores, _ = batch_data_variable(onebatch, vocab, ignoreTree=True)
         arcs_batch, rels_batch, arc_values = parser.parse(words, extwords, tags, lengths, masks, predict=True)
         for id, tree in enumerate(batch_variable_depTree(onebatch, arcs_batch, rels_batch, lengths, vocab)):
             printDepTree(output, tree, arc_values=arc_values[id])
 
             if not unlabeled:
-                arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[id], tree)
+                arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[id][0], tree)
                 arc_total_test += arc_total
                 arc_correct_test += arc_correct
                 rel_total_test += rel_total
@@ -86,9 +86,11 @@ if __name__ == '__main__':
 
     if config.unlabled_file is not "":
         unlabled_data = read_corpus(config.unlabled_file, vocab)
+        unlabled_data = domain_labeling(unlabled_data, False)
         predict(unlabled_data, parser, vocab, config.unlabled_file + '.out')
     else:
         test_data = read_corpus(config.test_file, vocab)
+        test_data = domain_labeling(test_data, False)
         arc_correct, rel_correct, arc_total, test_uas, test_las = \
             predict(test_data, parser, vocab, config.test_file + '.out', unlabeled=False)
         print("Test: uas = %d/%d = %.2f, las = %d/%d =%.2f" % \

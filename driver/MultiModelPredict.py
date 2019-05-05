@@ -11,41 +11,6 @@ from data.Dataloader import *
 import pickle
 import random
 
-def predict(data, parser, vocab, outputFile, unlabeled=True):
-    start = time.time()
-    parser.model.eval()
-    output = open(outputFile, 'w', encoding='utf-8')
-    #all_batch = len(data) // config.test_batch_size + 1
-    count = 0
-
-    arc_total_test, arc_correct_test, rel_total_test, rel_correct_test = 0, 0, 0, 0
-
-    for onebatch in data_iter(data, config.test_batch_size, False):
-        words, extwords, tags, heads, rels, lengths, masks, scores = batch_data_variable(onebatch, vocab, ignoreTree=True)
-        arcs_batch, rels_batch, arc_values = parser.parse(words, extwords, tags, lengths, masks, predict=True)
-        for id, tree in enumerate(batch_variable_depTree(onebatch, arcs_batch, rels_batch, lengths, vocab)):
-            printDepTree(output, tree, arc_values=arc_values[id])
-
-            if not unlabeled:
-                arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[count], tree)
-                arc_total_test += arc_total
-                arc_correct_test += arc_correct
-                rel_total_test += rel_total
-                rel_correct_test += rel_correct
-                count += 1
-    output.close()
-
-
-    end = time.time()
-    during_time = float(end - start)
-    print("\nsentence num: %d,  parser predict time = %.2f " % (len(data), during_time))
-
-    if not unlabeled:
-        uas = arc_correct_test * 100.0 / arc_total_test
-        las = rel_correct_test * 100.0 / rel_total_test
-        return arc_correct_test, rel_correct_test, arc_total_test, uas, las
-
-
 def arc_pred(avg_arc_probs, lengths, predict):
     arcs_batch, arc_values = [], []
     for arc_probs, length in zip(avg_arc_probs, lengths):
@@ -78,7 +43,7 @@ def multi_models_predict(data, parser_list, vocab, outputFile, unlabeled=True):
     arc_total_test, arc_correct_test, rel_total_test, rel_correct_test = 0, 0, 0, 0
 
     for onebatch in data_iter(data, config.test_batch_size, False):
-        words, extwords, tags, heads, rels, lengths, masks, scores = batch_data_variable(onebatch, vocab, ignoreTree=True)
+        words, extwords, tags, heads, rels, lengths, masks, scores, _ = batch_data_variable(onebatch, vocab, ignoreTree=True)
 
         arc_probs_list = []
         for parser in parser_list:
@@ -100,7 +65,7 @@ def multi_models_predict(data, parser_list, vocab, outputFile, unlabeled=True):
             printDepTree(output, tree, arc_values=arc_values[id])
 
             if not unlabeled:
-                arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[id], tree)
+                arc_total, arc_correct, rel_total, rel_correct = evalDepTree(onebatch[id][0], tree)
                 arc_total_test += arc_total
                 arc_correct_test += arc_correct
                 rel_total_test += rel_total
@@ -183,9 +148,11 @@ if __name__ == '__main__':
 
     if args.unlabled_file is not "":
         unlabled_data = read_corpus(args.unlabled_file, ref_v)
+        unlabled_data = domain_labeling(unlabled_data, False)
         multi_models_predict(unlabled_data, parser_list, ref_v, args.unlabled_file + '.out', unlabeled=True)
     else:
         test_data = read_corpus(config.test_file, ref_v)
+        test_data = domain_labeling(test_data, False)
         arc_correct, rel_correct, arc_total, test_uas, test_las = \
         multi_models_predict(test_data, parser_list, ref_v, config.test_file + '.out', unlabeled=False)
         print("Test: uas = %d/%d = %.2f, las = %d/%d =%.2f" % \
